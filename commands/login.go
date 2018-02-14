@@ -12,7 +12,6 @@ import (
 	"github.com/concourse/atc"
 	"github.com/concourse/fly/rc"
 	"github.com/concourse/go-concourse/concourse"
-	"github.com/concourse/skymarshal/provider"
 )
 
 type LoginCommand struct {
@@ -81,7 +80,7 @@ func (command *LoginCommand) Execute(args []string) error {
 	}
 
 	client := target.Client()
-	token, err := command.login(client, target.CACert(), target.Client().URL())
+	tokenType, tokenValue, err := command.login(client, target.CACert(), target.Client().URL())
 	if err != nil {
 		return err
 	}
@@ -91,8 +90,8 @@ func (command *LoginCommand) Execute(args []string) error {
 	return command.saveTarget(
 		client.URL(),
 		&rc.TargetToken{
-			Type:  token.Type,
-			Value: token.Value,
+			Type:  tokenType,
+			Value: tokenValue,
 		},
 		target.CACert(),
 	)
@@ -102,9 +101,7 @@ func (command *LoginCommand) login(
 	client concourse.Client,
 	caCert string,
 	targetUrl string,
-) (*provider.AuthToken, error) {
-
-	var token provider.AuthToken
+) (string, string, error) {
 
 	var tokenStr string
 
@@ -124,7 +121,7 @@ func (command *LoginCommand) login(
 
 	fmt.Println("navigate to the following URL in your browser:")
 	fmt.Println("")
-	fmt.Printf("    %s/auth/login?redirect=%s\n", targetUrl, redirectUrl.String())
+	fmt.Printf("    %s/sky/login?redirect=%s\n", targetUrl, redirectUrl.String())
 	fmt.Println("")
 
 	go waitForTokenInput(stdinChannel, errorChannel)
@@ -135,15 +132,12 @@ func (command *LoginCommand) login(
 	case tokenStrMsg := <-stdinChannel:
 		tokenStr = tokenStrMsg
 	case errorMsg := <-errorChannel:
-		return nil, errorMsg
+		return "", "", errorMsg
 	}
 
 	segments := strings.SplitN(tokenStr, " ", 2)
 
-	token.Type = segments[0]
-	token.Value = segments[1]
-
-	return &token, nil
+	return segments[0], segments[1], nil
 }
 
 func listenForTokenCallback(tokenChannel chan string, errorChannel chan error, portChannel chan string, targetUrl string) {
